@@ -2,6 +2,8 @@ package users
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"work_with_db/internal/dbs/postgres"
 	"work_with_db/internal/entities"
 	"work_with_db/internal/models"
@@ -27,6 +29,7 @@ users
 */
 
 /*
+posts
 | id  | user_id | likes | created_at          |
 |-----|---------|-------|-------------------- |
 | 101 | 1       | 45    | 2024-12-15 10:00:00 |
@@ -67,54 +70,34 @@ func (r *Repository) GetAllUsersWithPosts() ([]models.User, error) {
 	if len(rawUsers) == 0 {
 		return []models.User{}, nil // Возвращаем пустой слайс, а не nil
 	}
+	return models.NewUser(rawUsers), nil
+}
 
-	/*
-		| user_id | user_name       | last_login          | post_id | post_likes | post_created_at     |
-		|---------|----------------|-------------------- |---------|------------|-------------------- |
-		| 1       | Алексей Петров | 2024-12-20 14:30:00 | 101     | 45         | 2024-12-15 10:00:00 |
-		| 1       | Алексей Петров | 2024-12-20 14:30:00 | 102     | 123        | 2024-12-18 16:30:00 |
-		| 1       | Алексей Петров | 2024-12-20 14:30:00 | 103     | 67         | 2024-12-19 09:15:00 |
-		| 2       | Мария Иванова  | 2024-12-21 08:45:00 | NULL    | NULL       | NULL                |
-		| 3       | Дмитрий Сидоров| 2024-12-20 22:12:30 | 201     | 5847       | 2024-12-10 12:00:00 |
-	*/
-	// 2. Нашей задачей будет собрать данные из плоских файлов
-	/*
-				go[]User{
-			    {ID: 1, Name: "Алексей Петров", Posts: [Post{101}, Post{102}, Post{103}]},
-			    {ID: 2, Name: "Мария Иванова", Posts: []},
-			    {ID: 3, Name: "Дмитрий Сидоров", Posts: [Post{201}]},
-			}
-		[1, 101; 1, 102; 1, 103; 2, NULL; 3, 201]
-	*/
-	var users []models.User
-	userIndexMap := make(map[uint64]int) // Карта ID пользователя -> индекс в слайсе
-	for _, user := range rawUsers {
-		userIndex, exists := userIndexMap[user.ID]
-
-		if !exists {
-			// создаем нового пользователя
-			newUser := models.User{
-				ID:        user.ID,
-				Name:      user.Name,
-				LastLogin: user.LastLogin,
-				Posts:     make([]models.Post, 0),
-			}
-
-			users = append(users, newUser)
-			userIndexMap[newUser.ID] = len(users) - 1
-			userIndex = len(users) - 1
-		}
-
-		// добавляем пост
-		if user.PostID != nil {
-			post := models.Post{
-				ID:        *user.PostID,
-				UserID:    user.ID,
-				Likes:     *user.PostLikes,
-				CreatedAt: *user.PostCreatedAt,
-			}
-			users[userIndex].Posts = append(users[userIndex].Posts, post)
-		}
+func (r *Repository) GetUserByIDs(ids []uint64) ([]models.User, error) {
+	if len(ids) == 0 {
+		return nil, nil
 	}
-	return users, nil
+	args := make([]interface{}, 0, len(ids))
+	inParams := make([]string, 0, len(ids))
+	for i, id := range ids {
+		args = append(args, interface{}(id))
+		inParams = append(inParams, fmt.Sprintf("$%d", i+1))
+	}
+	query := fmt.Sprintf(`
+		SELECT
+			users.id AS user_id, users.name AS user_name,
+            users.last_login AS user_last_login,
+            posts.id AS post_id, posts.likes AS post_likes,
+            posts.created_at AS post_created_at
+        FROM users
+		    LEFT JOIN posts ON users.id = posts.user_id
+		WHERE users.id IN (%s)
+		ORDER BY users.last_login DESC, posts.created_at DESC     
+	`, strings.Join(inParams, ","))
+	rawUsers := make([]entities.UserWithPosts, 0)
+	err := r.db.MySQL.Select(&rawUsers, query, args...)
+	if err != nil {
+		return nil, errors.New("failed to execute query: " + err.Error())
+	}
+	return models.NewUser(rawUsers), nil
 }
