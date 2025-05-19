@@ -5,6 +5,7 @@ import (
 	_ "github.com/lib/pq"
 	"log"
 	"work_with_db/internal/dbs/postgres"
+	"work_with_db/internal/repositories/users"
 )
 
 func main() {
@@ -14,5 +15,7 @@ func main() {
 		log.Fatal(err)
 	}
 	fmt.Println(sql)
-
+	userRepo := users.NewRepository(sql)
+	users, _ := userRepo.GetAllUsers()
+	fmt.Println(users)
 }
