@@ -1,27 +1,18 @@
 package main
 
 import (
-	"database/sql"
-	"log"
-
+	"fmt"
 	_ "github.com/lib/pq"
+	"log"
+	"work_with_db/internal/dbs/postgres"
 )
 
 func main() {
-	connStr := "host=127.0.0.1 user=postgres password=postgres dbname=postgres_work_with_db port=5435 sslmode=disable"
-
-	db, err := sql.Open("postgres", connStr)
+	conf := postgres.NewConfig()
+	sql, err := postgres.NewDb(conf)
 	if err != nil {
-		log.Println("Failed to connect to database")
 		log.Fatal(err)
 	}
-	defer db.Close()
+	fmt.Println(sql)
 
-	err = db.Ping()
-	if err != nil {
-		log.Println("Failed to ping database")
-		log.Fatal(err)
-	}
-
-	log.Println("Successfully connected to the database!")
 }
